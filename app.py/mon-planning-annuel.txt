@@ -1,0 +1,63 @@
+import streamlit as st
+import sqlite3
+import os
+
+# --- Configuration ---
+if not os.path.exists("documents"):
+    os.makedirs("documents")
+
+# --- Base de données ---
+def init_db():
+    conn = sqlite3.connect('mon_planning.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS dossiers (
+            id INTEGER PRIMARY KEY,
+            nom TEXT,
+            statut TEXT,
+            chemin_fichier TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- Interface ---
+st.title("Mon Planning Annuel 2026")
+
+# Formulaire
+with st.form("ajout_dossier", clear_on_submit=True):
+    nom = st.text_input("Nom du dossier")
+    statut = st.selectbox("Statut", ["À faire", "En cours", "Fait"])
+    fichier = st.file_uploader("Joindre un document")
+    submit = st.form_submit_button("Ajouter le dossier")
+
+if submit and nom:
+    chemin_sauvegarde = None
+    if fichier:
+        chemin_sauvegarde = os.path.join("documents", fichier.name)
+        with open(chemin_sauvegarde, "wb") as f:
+            f.write(fichier.getbuffer())
+    
+    conn = sqlite3.connect('mon_planning.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO dossiers (nom, statut, chemin_fichier) VALUES (?, ?, ?)", 
+                   (nom, statut, chemin_sauvegarde))
+    conn.commit()
+    conn.close()
+    st.success(f"Dossier '{nom}' ajouté !")
+
+# --- Affichage des dossiers ---
+st.subheader("Mes Dossiers")
+conn = sqlite3.connect('mon_planning.db')
+dossiers = conn.execute("SELECT * FROM dossiers").fetchall()
+conn.close()
+
+for d in dossiers:
+    col1, col2, col3 = st.columns([2, 1, 1])
+    col1.write(f"**{d[1]}**")
+    col2.write(d[2]) # Statut
+    if d[3]: # Si fichier présent
+        with open(d[3], "rb") as f:
+            col3.download_button("Télécharger", f, file_name=os.path.basename(d[3]), key=f"dl_{d[0]}")
